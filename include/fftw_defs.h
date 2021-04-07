@@ -6,6 +6,10 @@
 
 #include <fftw3.h>          // (after complex.h) needed so can typedef FFTW_CPX
 
+#ifdef __INTEL_LLVM_COMPILER
+#include <offload/fftw3_omp_offload.h>
+#endif
+
 // prec-indep interfaces to FFTW and other math utilities...
 #ifdef SINGLE
   typedef fftwf_complex FFTW_CPX;           //  single-prec has fftwf_*

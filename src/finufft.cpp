@@ -630,8 +630,10 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     // *** should set equal to batchsize?
     // *** put in logic for setting FFTW # thr based on o.spread_thread?
     FFTW_INIT();           // only does anything when OMP=ON for >1 threads
-    FFTW_PLAN_TH(nthr_fft); // " (not batchSize since can be 1 but want mul-thr)
+#ifndef __INTEL_LLVM_COMPILER
+		FFTW_PLAN_TH(nthr_fft); // " (not batchSize since can be 1 but want mul-thr)
     FFTW_PLAN_SF();         // make planner thread-safe
+#endif
     p->spopts.spread_direction = type;
 
     if (p->opts.showwarn) {  // user warn round-off error...
@@ -692,9 +694,22 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
    
     timer.restart();            // plan the FFTW
     int *ns = GRIDSIZE_FOR_FFTW(p);
-    // fftw_plan_many_dft args: rank, gridsize/dim, howmany, in, inembed, istride, idist, ot, onembed, ostride, odist, sign, flags 
-    p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
-         NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
+
+#ifdef __INTEL_LLVM_COMPILER
+		int dev_no = 0;
+    if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW %dd plan\n", __func__,dev_no,dim);
+		#pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
+		{
+			FFTW_CPX* dev_ptr = p->fwBatch;
+			#pragma omp target variant dispatch use_device_ptr(dev_ptr) device(dev_no)
+			{
+#endif
+				p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
+						 NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
+#ifdef __INTEL_LLVM_COMPILER
+			}
+		}
+#endif
     if (p->opts.debug) printf("[%s] FFTW plan (mode %d, nthr=%d):\t%.3g s\n", __func__,p->opts.fftw, nthr_fft, timer.elapsedsec());
     delete []ns;
 
@@ -911,6 +926,7 @@ int FINUFFT_SETPTS(FINUFFT_PLAN p, BIGINT nj, FLT* xj, FLT* yj, FLT* zj,
     t2opts.spread_debug = max(0,p->opts.spread_debug-1);
     t2opts.showwarn = 0;                          // so don't see warnings 2x
     // (...could vary other t2opts here?)
+
     int ier = FINUFFT_MAKEPLAN(2, d, t2nmodes, p->fftSign, p->batchSize, p->tol,
                                &p->innerT2plan, &t2opts);
     if (ier>1) {     // if merely warning, still proceed
@@ -973,7 +989,21 @@ int FINUFFT_EXECUTE(FINUFFT_PLAN p, CPX* cj, CPX* fk){
              
       // STEP 2: call the pre-planned FFT on this batch
       timer.restart();
-      FFTW_EX(p->fftwPlan);   // if thisBatchSize<batchSize it wastes some flops
+#ifdef __INTEL_LLVM_COMPILER
+			int dev_no = 0;
+    	if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW exec\n", __func__,dev_no);
+    //	#pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
+    	//{
+				#pragma omp target variant dispatch device(dev_no)
+				{
+#endif
+					FFTW_EX(p->fftwPlan);   // if thisBatchSize<batchSize it wastes some flops
+#ifdef __INTEL_LLVM_COMPILER
+				}
+				#pragma omp target update from(p->fwBatch[0:(p->nf * p->batchSize)])
+			//}
+#endif
+
       t_fft += timer.elapsedsec();
       if (p->opts.debug>1)
         printf("\tFFTW exec:\t\t%.3g s\n", timer.elapsedsec());
