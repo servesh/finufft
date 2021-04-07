@@ -579,6 +579,11 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     nthr = p->opts.nthreads;                // user override (no limit or check)
   p->opts.nthreads = nthr;                  // store actual # thr planned for
 
+#ifdef __GPU_TDV_OFFLOAD__
+  nthr = 1;
+  p->opts.nthreads = nthr;                  // reset to 1 thread for GPU offload
+#endif
+
   // choose batchSize for types 1,2 or 3... (uses int ceil(b/a)=1+(b-1)/a trick)
   if (p->opts.maxbatchsize==0) {            // logic to auto-set best batchsize
     p->nbatch = 1+(ntrans-1)/nthr;          // min # batches poss
@@ -630,8 +635,8 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     // *** should set equal to batchsize?
     // *** put in logic for setting FFTW # thr based on o.spread_thread?
     FFTW_INIT();           // only does anything when OMP=ON for >1 threads
-#ifndef __INTEL_LLVM_COMPILER
-		FFTW_PLAN_TH(nthr_fft); // " (not batchSize since can be 1 but want mul-thr)
+#ifndef __GPU_TDV_OFFLOAD__
+    FFTW_PLAN_TH(nthr_fft); // " (not batchSize since can be 1 but want mul-thr)
     FFTW_PLAN_SF();         // make planner thread-safe
 #endif
     p->spopts.spread_direction = type;
@@ -695,20 +700,30 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     timer.restart();            // plan the FFTW
     int *ns = GRIDSIZE_FOR_FFTW(p);
 
-#ifdef __INTEL_LLVM_COMPILER
-		int dev_no = 0;
+#ifdef __GPU_TDV_OFFLOAD__
+    int dev_no = 0;
     if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW %dd plan\n", __func__,dev_no,dim);
-		#pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
-		{
-			FFTW_CPX* dev_ptr = p->fwBatch;
-			#pragma omp target variant dispatch use_device_ptr(dev_ptr) device(dev_no)
-			{
+
+    char s[20];
+    if( p->dim == 1 )
+      sprintf( s, "%d", ns[ 0 ] );
+    else if( p->dim == 2 )
+      sprintf( s, "%d %d", ns[ 0 ], ns[ 1 ] );
+    else if( p->dim == 3 )
+      sprintf( s, "%d %d %d", ns[ 0 ], ns[ 1 ], ns[ 2 ] );
+
+    printf("[%s] Using Intel GPU %d for FFTW %dd plan opts rank=%d N=[%s] M=%d x=%p EN=%s stride=%d dist=%ld x=%p EN=%s stride=%d dist=%ld FFTW_SIGN=%d FFTW_OPTS=%d \n", __func__,dev_no,dim, dim, s, p->batchSize, p->fwBatch, "NULL", 1, p->nf, p->fwBatch, "NULL", 1, p->nf, p->fftSign, p->opts.fftw);
+    #pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
+    {
+      FFTW_CPX* dev_ptr = p->fwBatch;
+      #pragma omp target variant dispatch use_device_ptr(dev_ptr) device(dev_no)
+      {
 #endif
-				p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
-						 NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
-#ifdef __INTEL_LLVM_COMPILER
-			}
-		}
+        p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
+             NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
+#ifdef __GPU_TDV_OFFLOAD__
+      }
+    }
 #endif
     if (p->opts.debug) printf("[%s] FFTW plan (mode %d, nthr=%d):\t%.3g s\n", __func__,p->opts.fftw, nthr_fft, timer.elapsedsec());
     delete []ns;
@@ -989,19 +1004,21 @@ int FINUFFT_EXECUTE(FINUFFT_PLAN p, CPX* cj, CPX* fk){
              
       // STEP 2: call the pre-planned FFT on this batch
       timer.restart();
-#ifdef __INTEL_LLVM_COMPILER
-			int dev_no = 0;
-    	if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW exec\n", __func__,dev_no);
-    //	#pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
-    	//{
-				#pragma omp target variant dispatch device(dev_no)
-				{
+#ifdef __GPU_TDV_OFFLOAD__
+      int dev_no = 0;
+      if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW exec\n", __func__,dev_no);
+      //#pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
+      //{
+        #pragma omp target update to(p->fwBatch[0:(p->nf * p->batchSize)])
+        #pragma omp target variant dispatch device(dev_no) nowait
+        {
 #endif
-					FFTW_EX(p->fftwPlan);   // if thisBatchSize<batchSize it wastes some flops
-#ifdef __INTEL_LLVM_COMPILER
-				}
-				#pragma omp target update from(p->fwBatch[0:(p->nf * p->batchSize)])
-			//}
+          FFTW_EX(p->fftwPlan);   // if thisBatchSize<batchSize it wastes some flops
+#ifdef __GPU_TDV_OFFLOAD__
+        }
+        #pragma omp taskwait
+        #pragma omp target update from(p->fwBatch[0:(p->nf * p->batchSize)])
+      //}
 #endif
 
       t_fft += timer.elapsedsec();
@@ -1107,6 +1124,7 @@ int FINUFFT_DESTROY(FINUFFT_PLAN p)
 // Thus either each thing free'd here is guaranteed to be NULL or correctly
 // allocated.
 {
+	if (p->opts.debug) printf("[%s] in destroy\n",__func__);
   if (!p)                // don't free a NULL
     return 1;
   FFTW_FR(p->fwBatch);   // free the big FFTW (or t3 spread) working array

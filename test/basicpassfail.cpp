@@ -40,6 +40,6 @@ int main()
     if (aF>Finfnrm) Finfnrm=aF;
   }
   FLT relerr = abs(F[nout] - Ftest)/Finfnrm;
-  //printf("requested tol %.3g: rel err for one mode %.3g\n",tol,relerr);
+  printf("requested tol %.3g: rel err for one mode %.3g\n",tol,relerr);
   return (std::isnan(relerr) || relerr > 10.0*tol);    // true reports failure
 }

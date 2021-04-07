@@ -6,17 +6,9 @@ CXX=icpx
 CC=icx
 FC=ifx
 
-# we want to start fresh, ignore the GCC flags...
-#CFLAGS = -Wno-implicit-const-int-float-conversion -DMKL_ILP64 -m64 -I$(MKLROOT)/include -I$(MKLROOT)/include/fftw -I$(MKLROOT)/include/fftw/offload -Icommon -O2 -g -fiopenmp -fopenmp-targets=spir64 -fsycl
-#CFLAGS = -Wno-implicit-const-int-float-conversion -DMKL_ILP64 -qmkl -I$(MKLROOT)/include/fftw -I$(MKLROOT)/include/fftw/offload -O2 -g -fiopenmp -fopenmp-targets=spir64 -fsycl
-CFLAGS = -DMKL_ILP64 -qmkl -I$(MKLROOT)/include/fftw -I$(MKLROOT)/include/fftw/offload -O2 -g -fiopenmp -fopenmp-targets=spir64 -fsycl
+CFLAGS = -Wunknown-pragmas -Wno-implicit-const-int-float-conversion -DMKL_ILP64 -qmkl -I$(MKLROOT)/include/fftw -I$(MKLROOT)/include/fftw/offload -O2 -g -fiopenmp -fopenmp-targets=spir64 -fsycl -D__GPU_TDV_OFFLOAD__
 CXXFLAGS = $(CFLAGS)
 FFLAGS   = $(CFLAGS)
 OMPFLAGS =
 OMPLIBS =
-
-#LIBS = -lpthread -ldl -lm -lstdc++ -L$(MKLROOT)/lib/intel64 -lmkl_sycl -lmkl_intel_ilp64 -lmkl_core -lmkl_intel_thread -liomp5 -lsycl
-#LIBS = -fpic -lpthread -ldl -lm -lstdc++ -qmkl -fiopenmp -fopenmp-targets=spir64
-#LIBS = -lpthread -ldl -lm -lstdc++ -qmkl
-#LIBS = -qmkl
 LIBS = 
