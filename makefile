@@ -69,7 +69,11 @@ FFLAGS := $(FFLAGS) $(INCL) -I/usr/include -fPIC
 
 # single-thread total list of math and FFTW libs (now both precisions)...
 # (Note: finufft tests use LIBSFFT; spread & util tests only need LIBS)
+ifeq ($(ONEAPI),ON)
+LIBSFFT := $(LIBS)
+else
 LIBSFFT := -l$(FFTWNAME) -l$(FFTWNAME)f $(LIBS)
+endif
 
 # multi-threaded libs & flags, and req'd flags (OO for new interface)...
 ifneq ($(OMP),OFF)
@@ -81,7 +85,11 @@ OFLAGS += $(OOMPFLAGS) -DR2008OO
 LIBS += $(OMPLIBS)
 ifneq ($(MINGW),ON)
 # omp override for total list of math and FFTW libs (now both precisions)...
+ifeq ($(ONEAPI),ON)
+LIBSFFT := $(LIBS)
+else
 LIBSFFT := -l$(FFTWNAME) -l$(FFTWNAME)_$(FFTWOMPSUFFIX) -l$(FFTWNAME)f -l$(FFTWNAME)f_$(FFTWOMPSUFFIX) $(LIBS)
+endif
 endif
 endif
 

@@ -14,9 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
-extern "C" {
-  #include "../contrib/legendre_rule_fast.h"
-}
+
+#include "../contrib/legendre_rule_fast.h"
+
 using namespace std;
 
 
