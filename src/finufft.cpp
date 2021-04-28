@@ -516,6 +516,10 @@ void FINUFFT_DEFAULT_OPTS(nufft_opts *o)
   o->spread_debug = 0;
   o->showwarn = 1;
 
+#ifdef __GPU_TDV_OFFLOAD_DEBUG__
+	o->debug = 1;
+#endif
+
   o->nthreads = 0;
   o->fftw = FFTW_ESTIMATE;
   o->spread_sort = 2;
@@ -689,7 +693,8 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
       fprintf(stderr, "[%s] fwBatch would be bigger than MAX_NF, not attempting malloc!\n",__func__);
       return ERR_MAXNALLOC;
     }
-    p->fwBatch = FFTW_ALLOC_CPX(p->nf * p->batchSize);    // the big workspace
+		p->fwBatch = FFTW_ALLOC_CPX(p->nf * p->batchSize);    // the big workspace
+    //p->fwBatch = (FFTW_CPX*) FFTW_ALLOC_CPX( sizeof(FFTW_CPX) * p->nf * p->batchSize);    // the big workspace
     if (p->opts.debug) printf("[%s] fwBatch %.2fGB alloc:   \t%.3g s\n", __func__,(double)1E-09*sizeof(CPX)*p->nf*p->batchSize, timer.elapsedsec());
     if(!p->fwBatch) {      // we don't catch all such mallocs, just this big one
       fprintf(stderr, "[%s] FFTW malloc failed for fwBatch (working fine grids)!\n",__func__);
@@ -704,6 +709,7 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     int dev_no = 0;
     if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW %dd plan\n", __func__,dev_no,dim);
 
+#ifdef __GPU_TDV_OFFLOAD_DEBUG__
     char s[20];
     if( p->dim == 1 )
       sprintf( s, "%d", ns[ 0 ] );
@@ -713,14 +719,16 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
       sprintf( s, "%d %d %d", ns[ 0 ], ns[ 1 ], ns[ 2 ] );
 
     printf("[%s] Using Intel GPU %d for FFTW %dd plan opts rank=%d N=[%s] M=%d x=%p EN=%s stride=%d dist=%ld x=%p EN=%s stride=%d dist=%ld FFTW_SIGN=%d FFTW_OPTS=%d \n", __func__,dev_no,dim, dim, s, p->batchSize, p->fwBatch, "NULL", 1, p->nf, p->fwBatch, "NULL", 1, p->nf, p->fftSign, p->opts.fftw);
-    #pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
+#endif
+    FFTW_CPX* dev_ptr = p->fwBatch;
+		size_t arr_sz = p->nf * p->batchSize;
+    #pragma omp target data map(tofrom:dev_ptr[0:arr_sz]) device(dev_no)
     {
-      FFTW_CPX* dev_ptr = p->fwBatch;
       #pragma omp target variant dispatch use_device_ptr(dev_ptr) device(dev_no)
       {
 #endif
-        p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
-             NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
+        p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, dev_ptr,
+             NULL, 1, p->nf, dev_ptr, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
 #ifdef __GPU_TDV_OFFLOAD__
       }
     }
@@ -823,6 +831,7 @@ int FINUFFT_SETPTS(FINUFFT_PLAN p, BIGINT nj, FLT* xj, FLT* yj, FLT* zj,
       fprintf(stderr, "[%s t3] fwBatch would be bigger than MAX_NF, not attempting malloc!\n",__func__);
       return ERR_MAXNALLOC;
     }
+    //p->fwBatch = (FFTW_CPX*) FFTW_ALLOC_CPX( sizeof(FFTW_CPX) * p->nf * p->batchSize);    // the big workspace
     p->fwBatch = FFTW_ALLOC_CPX(p->nf * p->batchSize);    // maybe big workspace
     // (note FFTW_ALLOC is not needed over malloc, but matches its type)
     p->CpBatch = (CPX*)malloc(sizeof(CPX) * nj*p->batchSize);  // batch c' work
@@ -1007,18 +1016,15 @@ int FINUFFT_EXECUTE(FINUFFT_PLAN p, CPX* cj, CPX* fk){
 #ifdef __GPU_TDV_OFFLOAD__
       int dev_no = 0;
       if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW exec\n", __func__,dev_no);
-      //#pragma omp target data map(tofrom:p->fwBatch[0:(p->nf * p->batchSize)]) device(dev_no)
-      //{
-        #pragma omp target update to(p->fwBatch[0:(p->nf * p->batchSize)])
-        #pragma omp target variant dispatch device(dev_no) nowait
-        {
+			FFTW_CPX* dev_ptr = p->fwBatch;
+			size_t arr_sz = p->nf * p->batchSize;
+			#pragma omp target data map(tofrom:dev_ptr[0:arr_sz]) device(dev_no)
+			#pragma omp target variant dispatch device(dev_no)
+			{
 #endif
-          FFTW_EX(p->fftwPlan);   // if thisBatchSize<batchSize it wastes some flops
+				FFTW_EX(p->fftwPlan);   // if thisBatchSize<batchSize it wastes some flops
 #ifdef __GPU_TDV_OFFLOAD__
-        }
-        #pragma omp taskwait
-        #pragma omp target update from(p->fwBatch[0:(p->nf * p->batchSize)])
-      //}
+			}
 #endif
 
       t_fft += timer.elapsedsec();
