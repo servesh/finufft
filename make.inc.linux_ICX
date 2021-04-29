@@ -6,7 +6,12 @@ CXX=icpx
 CC=icx
 FC=ifx
 
+#GPU
 CFLAGS = -Wunknown-pragmas -Wno-implicit-const-int-float-conversion -DMKL_ILP64 -qmkl -I$(MKLROOT)/include/fftw -I$(MKLROOT)/include/fftw/offload -O2 -g -fiopenmp -fopenmp-targets=spir64 -fsycl -D__GPU_TDV_OFFLOAD__
+
+#CPU
+#CFLAGS = -Wunknown-pragmas -Wno-implicit-const-int-float-conversion -DMKL_ILP64 -qmkl -I$(MKLROOT)/include/fftw -O2 -g -fsycl
+
 CXXFLAGS = $(CFLAGS)
 FFLAGS   = $(CFLAGS)
 OMPFLAGS =
