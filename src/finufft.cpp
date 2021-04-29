@@ -726,12 +726,13 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     {
       #pragma omp target variant dispatch use_device_ptr(dev_ptr) device(dev_no)
       {
-#endif
         p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, dev_ptr,
              NULL, 1, p->nf, dev_ptr, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
-#ifdef __GPU_TDV_OFFLOAD__
       }
     }
+#else
+		p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
+				 NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
 #endif
     if (p->opts.debug) printf("[%s] FFTW plan (mode %d, nthr=%d):\t%.3g s\n", __func__,p->opts.fftw, nthr_fft, timer.elapsedsec());
     delete []ns;
