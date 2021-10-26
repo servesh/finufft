@@ -432,7 +432,7 @@ endif
 pyclean:
 ifneq ($(MINGW),ON)
 # non-Windows...
-	rm -f python/finufft/*.pyc python/finufft/__pycache__/* python/test/*.pyc python/test/__pycache__/*
+	rm -f python/finufft/*.pyc python/finufft/__pycache__ python/test/*.pyc python/test/__pycache__ python/finufft/finufft.egg-info python/build/*
 	rm -rf python/fixed_wheel python/wheelhouse
 else
 # Windows...
