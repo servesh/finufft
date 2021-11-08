@@ -101,8 +101,8 @@ setup(
                   libraries=[finufft_dlib],
                   compiler='icx',
                   linker='icx',
-                  extra_compile_args=["-Wunknown-pragmas", "-Wno-implicit-const-int-float-conversion", "-DMKL_ILP64", "-qmkl", "-I/soft/restricted/CNDA/sdk/2021.10.30.001/oneapi/mkl/latest/include/fftw", "-I/soft/restricted/CNDA/sdk/2021.10.30.001/oneapi/mkl/latest/include/fftw/offload", "-O2", "-g", "-fiopenmp", "-fopenmp-targets=spir64", "-fsycl", "-D__GPU_TDV_OFFLOAD__", "-Iinclude", "-std=c++14", "-fPIC"],
-                  extra_link_args=["-pthread", "-shared", "-B", "-Wunknown-pragmas", "-Wno-implicit-const-int-float-conversion", "-DMKL_ILP64", "-qmkl", "-I/soft/restricted/CNDA/sdk/2021.10.30.001/oneapi/mkl/latest/include/fftw", "-I/soft/restricted/CNDA/sdk/2021.10.30.001/oneapi/mkl/latest/include/fftw/offload", "-O2", "-g", "-fiopenmp", "-fopenmp-targets=spir64", "-fsycl", "-D__GPU_TDV_OFFLOAD__", "-Iinclude", "-std=c++14", "-fPIC"])
+extra_compile_args=["-Wunknown-pragmas", "-Wno-implicit-const-int-float-conversion", "-DMKL_ILP64", "-qmkl", "-I$(MKLROOT)/include/fftw", "-I$(MKLROOT)/include/fftw/offload", "-O2", "-g", "-fiopenmp", "-fopenmp-targets=spir64", "-fsycl", "-D__GPU_TDV_OFFLOAD__", "-Iinclude", "-std=c++14", "-fPIC"],
+    extra_link_args=["-pthread", "-shared", "-B", "-Wunknown-pragmas", "-Wno-implicit-const-int-float-conversion", "-DMKL_ILP64", "-qmkl", "-I$(MKLROOT)/include/fftw", "-I$(MKLROOT)/include/fftw/offload", "-O2", "-g", "-fiopenmp", "-fopenmp-targets=spir64", "-fsycl", "-D__GPU_TDV_OFFLOAD__", "-Iinclude", "-std=c++14", "-fPIC"])
         ],
     cmdclass={"build_ext": custom_build_ext}
 )
