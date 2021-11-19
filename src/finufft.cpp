@@ -80,6 +80,11 @@ Design notes for guru interface implementation:
 */
 
 
+#ifdef __GPU_TDV_OFFLOAD__
+	#define GPU_STR "GPU TDV Offload "
+#else
+	#define GPU_STR ""
+#endif
 
 // ---------- local math routines (were in common.cpp; no need now): --------
 
@@ -555,8 +560,8 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     p->opts = *opts;    // keep a deep copy; changing *opts now has no effect
 
   if (p->opts.debug)    // do a hello world
-    printf("[%s] new plan: FINUFFT version " FINUFFT_VER " .................\n",__func__);
-  
+    printf("[%s] " GPU_STR "new plan: FINUFFT version " FINUFFT_VER " .................\n",__func__);
+
   if((type!=1)&&(type!=2)&&(type!=3)) {
     fprintf(stderr, "[%s] Invalid type (%d), should be 1, 2 or 3.\n",__func__,type);
     return ERR_TYPE_NOTVALID;
@@ -707,7 +712,6 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
 
 #ifdef __GPU_TDV_OFFLOAD__
     int dev_no = 0;
-    if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW %dd plan\n", __func__,dev_no,dim);
 
 #ifdef __GPU_TDV_OFFLOAD_DEBUG__
     char s[20];
@@ -718,7 +722,7 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
     else if( p->dim == 3 )
       sprintf( s, "%d %d %d", ns[ 0 ], ns[ 1 ], ns[ 2 ] );
 
-    printf("[%s] Using Intel GPU %d for FFTW %dd plan opts rank=%d N=[%s] M=%d x=%p EN=%s stride=%d dist=%ld x=%p EN=%s stride=%d dist=%ld FFTW_SIGN=%d FFTW_OPTS=%d \n", __func__,dev_no,dim, dim, s, p->batchSize, p->fwBatch, "NULL", 1, p->nf, p->fwBatch, "NULL", 1, p->nf, p->fftSign, p->opts.fftw);
+    printf("[%s] " GPU_STR " %d FFTW %dd%d plan opts rank=%d\n\tN=[%s] M(batchsize)=%d x=%p EN=%s stride=%d\n\tdist=%ld FFTW_SIGN=%d FFTW_OPTS=%d \n", __func__, dev_no, dim, type, dim, s, p->batchSize, p->fwBatch, "NULL", 1, p->nf, p->fftSign, p->opts.fftw);
 #endif
     FFTW_CPX* dev_ptr = p->fwBatch;
 		size_t arr_sz = p->nf * p->batchSize;
@@ -734,9 +738,9 @@ int FINUFFT_MAKEPLAN(int type, int dim, BIGINT* n_modes, int iflag,
 		p->fftwPlan = FFTW_PLAN_MANY_DFT(dim, ns, p->batchSize, p->fwBatch,
 				 NULL, 1, p->nf, p->fwBatch, NULL, 1, p->nf, p->fftSign, p->opts.fftw);
 #endif
-    if (p->opts.debug) printf("[%s] FFTW plan (mode %d, nthr=%d):\t%.3g s\n", __func__,p->opts.fftw, nthr_fft, timer.elapsedsec());
-    delete []ns;
+    if (p->opts.debug) printf("[%s] " GPU_STR " FFTW plan (mode %d, nthr=%d):\t%.3g s\n", __func__,p->opts.fftw, nthr_fft, timer.elapsedsec());
 
+    delete []ns;
     p->sortIndices = NULL;
     
   } else {  // -------------------------- type 3 (no planning) ------------
@@ -991,7 +995,7 @@ int FINUFFT_EXECUTE(FINUFFT_PLAN p, CPX* cj, CPX* fk){
   
     double t_sprint = 0.0, t_fft = 0.0, t_deconv = 0.0;  // accumulated timing
     if (p->opts.debug)
-      printf("[%s] start ntrans=%d (%d batches, bsize=%d)...\n", __func__, p->ntrans, p->nbatch, p->batchSize);
+      printf("[%s] " GPU_STR "start ntrans=%d (%d batches, bsize=%d)...\n", __func__, p->ntrans, p->nbatch, p->batchSize);
     
     for (int b=0; b*p->batchSize < p->ntrans; b++) { // .....loop b over batches
 
@@ -1016,7 +1020,6 @@ int FINUFFT_EXECUTE(FINUFFT_PLAN p, CPX* cj, CPX* fk){
       timer.restart();
 #ifdef __GPU_TDV_OFFLOAD__
       int dev_no = 0;
-      if (p->opts.debug) printf("[%s] Using Intel GPU %d for FFTW exec\n", __func__,dev_no);
 			FFTW_CPX* dev_ptr = p->fwBatch;
 			size_t arr_sz = p->nf * p->batchSize;
 			#pragma omp target data map(tofrom:dev_ptr[0:arr_sz]) device(dev_no)
@@ -1045,11 +1048,11 @@ int FINUFFT_EXECUTE(FINUFFT_PLAN p, CPX* cj, CPX* fk){
     
     if (p->opts.debug) {  // report total times in their natural order...
       if(p->type == 1) {
-        printf("[%s] done. tot spread:\t\t%.3g s\n",__func__,t_sprint);
+        printf("[%s] " GPU_STR "done. tot spread:\t\t%.3g s\n",__func__,t_sprint);
         printf("               tot FFT:\t\t\t\t%.3g s\n", t_fft);
         printf("               tot deconvolve:\t\t\t%.3g s\n", t_deconv);
       } else {
-        printf("[%s] done. tot deconvolve:\t\t%.3g s\n",__func__,t_deconv);
+        printf("[%s] " GPU_STR "done. tot deconvolve:\t\t%.3g s\n",__func__,t_deconv);
         printf("               tot FFT:\t\t\t\t%.3g s\n", t_fft);
         printf("               tot interp:\t\t\t%.3g s\n",t_sprint);
       }
